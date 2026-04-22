@@ -397,7 +397,7 @@ class App(tk.Tk):
         frm = ttk.Frame(self, padding=20)
         frm.pack(fill="both", expand=True)
 
-        ttk.Label(frm, text="Biblioteca Digital", font=("Segoe UI", 16, "bold")).pack(pady=(0, 15))
+        ttk.Label(frm, text="Biblioteca Digital BUAP", font=("Segoe UI", 16, "bold")).pack(pady=(0, 15))
 
         card = ttk.LabelFrame(frm, text="Iniciar sesión", padding=15)
         card.pack(pady=10)
