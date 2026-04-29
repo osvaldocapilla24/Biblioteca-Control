@@ -1,6 +1,9 @@
 # ==========================================
 # Biblioteca Digital - Interfaz (Tkinter)
-# Versión preparada para análisis con SonarQube
+# Con validaciones (login + formularios)
+# - NO muestra credenciales admin en la UI
+# - Fecha publicación NO permite fechas futuras
+# Python 3.x
 # ==========================================
 
 import tkinter as tk
@@ -9,11 +12,6 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Dict, Optional, List, Tuple
 import re
-
-
-# Credenciales hardcodeadas para provocar hallazgos
-ADMIN_USER = "admin"
-ADMIN_PASSWORD = "admin123"
 
 
 # -----------------------
@@ -35,7 +33,7 @@ class Libro:
     autor: str
     categoria: str
     fecha_publicacion: str
-    estado: str = "disponible"
+    estado: str = "disponible"   # "disponible" | "prestado"
     prestado_a: Optional[str] = None
 
 
@@ -58,8 +56,8 @@ class BibliotecaDigital:
         self.prestamos: Dict[str, Prestamo] = {}
         self._contador_prestamo = 1
 
-        # Hardcoded credentials
-        self.usuarios[ADMIN_USER] = Usuario(ADMIN_USER, "Administrador", ADMIN_PASSWORD, "admin")
+        # Admin por defecto (NO se muestra en UI)
+        self.usuarios["admin"] = Usuario("admin", "Administrador", "admin123", "admin")
 
     @staticmethod
     def hoy_str() -> str:
@@ -69,6 +67,7 @@ class BibliotecaDigital:
     def validar_tipo(tipo: str) -> bool:
         return tipo in {"admin", "estudiante", "profesor"}
 
+    # -------- Validaciones (LÓGICA) --------
     @staticmethod
     def _solo_letras_espacios(texto: str) -> bool:
         return bool(re.fullmatch(r"[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]+", texto.strip()))
@@ -83,9 +82,15 @@ class BibliotecaDigital:
 
     @staticmethod
     def _fecha_valida_yyyy_mm_dd(texto: str) -> bool:
+        """
+        Valida que:
+        - Formato sea YYYY-MM-DD
+        - Sea una fecha real
+        - NO sea una fecha futura
+        """
         try:
             f = datetime.strptime(texto.strip(), "%Y-%m-%d").date()
-            if f > date.today():
+            if f > date.today():  # no permitir futuras
                 return False
             return True
         except Exception:
@@ -98,114 +103,13 @@ class BibliotecaDigital:
 
     @staticmethod
     def _titulo_valido(texto: str) -> bool:
-        return bool(re.fullmatch(r"[A-Za-z0-9ÁÉÍÓÚÜÑáéíóúüñ .,:;()\\-]+", texto.strip()))
+        # permite letras/números/espacios y signos comunes .,:;()-
+        return bool(re.fullmatch(r"[A-Za-z0-9ÁÉÍÓÚÜÑáéíóúüñ .,:;()\-]+", texto.strip()))
 
     def _gen_prestamo_id(self) -> str:
         pid = f"P{self._contador_prestamo:04d}"
         self._contador_prestamo += 1
         return pid
-
-    # Función hecha a propósito para alta complejidad
-    def evaluar_usuario_riesgo(
-        self,
-        matricula: str,
-        password: str,
-        tipo: str,
-        activo: bool,
-        deuda: bool,
-        sancionado: bool,
-        edad: int,
-        permisos_especiales: bool
-    ) -> str:
-        if not matricula:
-            return "Sin matrícula"
-        if len(matricula) < 5:
-            return "Matrícula corta"
-        if not password:
-            return "Sin contraseña"
-        if len(password) < 4:
-            return "Contraseña débil"
-
-        if tipo == "admin":
-            if activo:
-                if deuda:
-                    if sancionado:
-                        return "Admin activo con deuda y sanción"
-                    else:
-                        if permisos_especiales:
-                            return "Admin con deuda y permisos"
-                        else:
-                            return "Admin con deuda"
-                else:
-                    if sancionado:
-                        if edad > 40:
-                            return "Admin sancionado mayor"
-                        else:
-                            return "Admin sancionado"
-                    else:
-                        if permisos_especiales:
-                            return "Admin activo especial"
-                        else:
-                            return "Admin activo"
-            else:
-                if deuda:
-                    return "Admin inactivo con deuda"
-                else:
-                    return "Admin inactivo"
-
-        elif tipo == "estudiante":
-            if activo:
-                if deuda:
-                    if sancionado:
-                        return "Estudiante con deuda y sanción"
-                    else:
-                        if edad < 18:
-                            return "Estudiante menor con deuda"
-                        else:
-                            return "Estudiante con deuda"
-                else:
-                    if sancionado:
-                        return "Estudiante sancionado"
-                    else:
-                        if permisos_especiales:
-                            return "Estudiante con permisos"
-                        else:
-                            return "Estudiante activo"
-            else:
-                if deuda:
-                    return "Estudiante inactivo con deuda"
-                else:
-                    return "Estudiante inactivo"
-
-        elif tipo == "profesor":
-            if activo:
-                if deuda:
-                    if sancionado:
-                        return "Profesor con deuda y sanción"
-                    else:
-                        if permisos_especiales:
-                            return "Profesor con deuda y permisos"
-                        else:
-                            return "Profesor con deuda"
-                else:
-                    if sancionado:
-                        if edad > 60:
-                            return "Profesor sancionado mayor"
-                        else:
-                            return "Profesor sancionado"
-                    else:
-                        if permisos_especiales:
-                            return "Profesor activo especial"
-                        else:
-                            return "Profesor activo"
-            else:
-                if deuda:
-                    return "Profesor inactivo con deuda"
-                else:
-                    return "Profesor inactivo"
-
-        else:
-            return "Tipo desconocido"
 
     # ---- Usuarios ----
     def registrar_usuario(self, matricula: str, nombre: str, password: str, tipo: str) -> Tuple[bool, str]:
@@ -218,7 +122,7 @@ class BibliotecaDigital:
             return False, "Tipo inválido (admin/estudiante/profesor)."
 
         if matricula != "admin" and not self._solo_numeros(matricula):
-            return False, "La matrícula debe ser solo números."
+            return False, "Solo números."
 
         if not self._solo_letras_espacios(nombre):
             return False, "El nombre solo debe contener letras y espacios."
@@ -306,11 +210,11 @@ class BibliotecaDigital:
     def modificar_libro(self, id_libro: str, titulo: str, autor: str, categoria: str, fecha_pub: str) -> Tuple[bool, str]:
         id_libro = id_libro.strip()
         if not id_libro:
-            return False, "Debes indicar el ID del libro."
+            return False, " indica el ID del libro."
 
         libro = self.libros.get(id_libro)
         if not libro:
-            return False, "Libro no encontrado."
+            return False, "El libro no se encontro."
 
         if titulo.strip():
             if not self._titulo_valido(titulo):
@@ -337,11 +241,11 @@ class BibliotecaDigital:
     def eliminar_libro(self, id_libro: str) -> Tuple[bool, str]:
         id_libro = id_libro.strip()
         if not id_libro:
-            return False, "Debes indicar el ID del libro."
+            return False, " indica el ID del libro."
 
         libro = self.libros.get(id_libro)
         if not libro:
-            return False, "Libro no encontrado."
+            return False, "El libro ne se encuentra."
 
         if libro.estado == "prestado":
             return False, "No se puede eliminar: el libro está prestado."
@@ -354,15 +258,9 @@ class BibliotecaDigital:
         t = termino.strip().lower()
         if not t:
             return list(self.libros.values())
-
         out = []
         for l in self.libros.values():
-            if (
-                t in l.id_libro.lower()
-                or t in l.titulo.lower()
-                or t in l.autor.lower()
-                or t in l.categoria.lower()
-            ):
+            if (t in l.id_libro.lower() or t in l.titulo.lower() or t in l.autor.lower() or t in l.categoria.lower()):
                 out.append(l)
         return out
 
@@ -423,9 +321,7 @@ class BibliotecaDigital:
         if not prestamo_activo:
             return False, "No se encontró el préstamo activo (dato inconsistente)."
 
-        prestamo_activo.fecha_devolucion = (
-            fecha_dev.strip() if fecha_dev and fecha_dev.strip() else self.hoy_str()
-        )
+        prestamo_activo.fecha_devolucion = (fecha_dev.strip() if fecha_dev and fecha_dev.strip() else self.hoy_str())
         libro.estado = "disponible"
         libro.prestado_a = None
         return True, f"Devolución registrada ({prestamo_activo.fecha_devolucion})."
@@ -450,6 +346,8 @@ class App(tk.Tk):
 
         self.sis = BibliotecaDigital()
         self.usuario_actual: Optional[Usuario] = None
+
+        # ✅ Si NO quieres usuarios/libros de ejemplo, ponlo en False
         self.CARGAR_DEMO = True
 
         if self.CARGAR_DEMO:
@@ -465,6 +363,7 @@ class App(tk.Tk):
         self.sis.registrar_libro("L002", "Redes de Computadoras", "Tanenbaum", "Redes", "2011-06-10")
         self.sis.registrar_libro("L003", "Bases de Datos", "Silberschatz", "BD", "2010-03-20")
 
+    # ---------- Validaciones (GUI) ----------
     def _vcmd_solo_letras(self, nuevo_valor: str) -> bool:
         if nuevo_valor == "":
             return True
@@ -480,6 +379,7 @@ class App(tk.Tk):
             return True
         return bool(re.fullmatch(r"[A-Za-z0-9_-]+", nuevo_valor))
 
+    # ---------- Helpers ----------
     def _clear_root(self):
         for w in self.winfo_children():
             w.destroy()
@@ -490,52 +390,20 @@ class App(tk.Tk):
     def _error(self, msg: str):
         messagebox.showerror("Error", msg)
 
-    # Duplicación intencional 1
-    def _mostrar_exito_1(self, msg: str):
-        texto_auxiliar = "ok"
-        contador_auxiliar = 0
-        bandera_local = True
-        if not msg:
-            messagebox.showinfo("Info", "Operación correcta")
-        else:
-            messagebox.showinfo("Info", msg)
-        if bandera_local:
-            contador_auxiliar += 1
-        return texto_auxiliar, contador_auxiliar
-
-    # Duplicación intencional 2
-    def _mostrar_exito_2(self, msg: str):
-        texto_auxiliar = "ok"
-        contador_auxiliar = 0
-        bandera_local = True
-        if not msg:
-            messagebox.showinfo("Info", "Operación correcta")
-        else:
-            messagebox.showinfo("Info", msg)
-        if bandera_local:
-            contador_auxiliar += 1
-        return texto_auxiliar, contador_auxiliar
-
-    # Variables no usadas
-    def _metodo_prueba_sonar(self):
-        usuario_temporal = "admin"
-        contador_prueba = 999
-        mensaje_prueba = "esto es una prueba"
-        bandera_prueba = False
-        return "ok"
-
+    # ---------- Login ----------
     def _crear_login(self):
         self._clear_root()
 
         frm = ttk.Frame(self, padding=20)
         frm.pack(fill="both", expand=True)
 
-        ttk.Label(frm, text="Biblioteca Digital BUAP", font=("Segoe UI", 16, "bold")).pack(pady=(0, 15))
+        ttk.Label(frm, text="Biblioteca Digital", font=("Segoe UI", 16, "bold")).pack(pady=(0, 15))
 
         card = ttk.LabelFrame(frm, text="Iniciar sesión", padding=15)
         card.pack(pady=10)
 
         ttk.Label(card, text="Matrícula:").grid(row=0, column=0, sticky="w", padx=5, pady=5)
+        # En login NO restringimos typing para permitir "admin".
         self.ent_mat = ttk.Entry(card, width=30)
         self.ent_mat.grid(row=0, column=1, padx=5, pady=5)
 
@@ -554,16 +422,14 @@ class App(tk.Tk):
         self._info(msg)
         self._crear_dashboard()
 
+    # ---------- Dashboard ----------
     def _crear_dashboard(self):
         self._clear_root()
 
         top = ttk.Frame(self, padding=(12, 10))
         top.pack(fill="x")
-        ttk.Label(
-            top,
-            text=f"Sesión: {self.usuario_actual.nombre} ({self.usuario_actual.tipo})",
-            font=("Segoe UI", 12, "bold")
-        ).pack(side="left")
+        ttk.Label(top, text=f"Sesión: {self.usuario_actual.nombre} ({self.usuario_actual.tipo})",
+                  font=("Segoe UI", 12, "bold")).pack(side="left")
         ttk.Button(top, text="Cerrar sesión", command=self._logout).pack(side="right")
 
         body = ttk.Frame(self, padding=(12, 8))
@@ -617,23 +483,15 @@ class App(tk.Tk):
         self.usuario_actual = None
         self._crear_login()
 
+    # ---------- Tabla ----------
     def _llenar_tabla_libros(self, libros: List[Libro]):
         for item in self.tree.get_children():
             self.tree.delete(item)
         for l in libros:
-            self.tree.insert(
-                "",
-                "end",
-                values=(
-                    l.id_libro,
-                    l.titulo,
-                    l.autor,
-                    l.categoria,
-                    l.fecha_publicacion,
-                    l.estado,
-                    l.prestado_a or "-"
-                )
-            )
+            self.tree.insert("", "end", values=(
+                l.id_libro, l.titulo, l.autor, l.categoria,
+                l.fecha_publicacion, l.estado, l.prestado_a or "-"
+            ))
 
     def _ver_disponibilidad(self):
         self._llenar_tabla_libros(self.sis.todos())
@@ -641,6 +499,7 @@ class App(tk.Tk):
     def _reporte_prestados(self):
         self._llenar_tabla_libros(self.sis.libros_prestados())
 
+    # ---------- Popups ----------
     def _popup(self, titulo: str) -> tk.Toplevel:
         win = tk.Toplevel(self)
         win.title(titulo)
@@ -716,6 +575,7 @@ class App(tk.Tk):
 
         ttk.Button(frm, text="Devolver", command=ejecutar).pack(pady=10)
 
+    # ---------- Admin popups ----------
     def _reg_usuario_popup(self):
         win = self._popup("Registrar usuario")
         frm = ttk.Frame(win, padding=12)
